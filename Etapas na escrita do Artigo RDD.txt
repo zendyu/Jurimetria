@@ -1,0 +1,24 @@
+Artigo RDD:
+
+1 - Introdução Jurimetria
+
+2 - Dados e perguntas a serem respondidas
+
+3 - Metodologia Utilizada (RDD, delimitação da bandwidth)
+
+4 - Resultados obtidos e repercussão (limitações) do estudo
+
+5 - Conclusão
+
+Apêndice A:
+
+I) Inferência Causal
+II) Modelo de Outcomes potenciais
+III) RDD 
+a) hipóteses de identificação
+b) regressão característica
+c) seleção de bandwidth / intervalo de bins
+d) testes possíveis
+
+Apêndice B:
+Legislação LIA e alterações indicadas

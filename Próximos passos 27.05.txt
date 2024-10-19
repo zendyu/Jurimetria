@@ -1,0 +1,42 @@
+Dúvidas:
+
+como explicar minha váriavel x e y?  considerando as partes envolvidas.
+
+Hipótese 1:
+para modelar: RDD com base no percentual de não provimentos MP/Demais públicos e provimentos Particular
+
+Primeira etapa: verificar taxa de procedÇencia, por mÊs a ano, para ver se vale o problema
+	- groupby mês e ano
+	- summarise quantos provimentos
+
+ggplot o groupby pra ter a prévia.
+
+
+como discriminar os casos em que ele deu provimento parcial?
+	provimento parcial, considerar como provimento para esta primeira análise.
+
+verificar com o gráfico se teve queda nos provimentos do MP e/ou não-provimento dos recursos do particular.
+
+
+
+não há necessidade de covariadas neste caso, o que precisa modelar é com relação ao tempo e ao percentual ao longo
+do tempo
+
+
+Hipótese 2:
+
+Com base nas ações entradas ao longo do tempo:
+verificar mês e ano e também fazer um summarise, group by
+	verificar a quantidade de novas ações em primeira instância
+
+as mesmas formas seguem
+
+terceira hipótese:
+verificar quantidade de recursos de apelação entrados pelos MP/Entidades públicas e das demais partes
+	fazer os groupby e verificar essas hipóteses
+
+
+
+Efeito causal ARCO - pesquisar sobre e verificar
+
+

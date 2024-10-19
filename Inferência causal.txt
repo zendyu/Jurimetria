@@ -1,0 +1,28 @@
+Inferência causal:
+
+- Preciso ler sobre regressão descontínua....
+
+- Dúvida: Análise pela qtde das novas ações? 
+
+Impacto da Lei 14230/21 na LIA (8429/92)
+
+- Novas ações de improbidade (treatment - 2022 ~ 2024)
+- Tendência de julgamento (só segunda instância tem resultado anotado em planilha) - cerca de 7100 processos 
+
+Descontinuidade
+
+
+
+Lava Jato
+
+- Novas ações de improbidade (treatment - 2016 ~ 2022)
+- Precisa ser de ações mais antigas pra servir de controle, tipo 2010 para cá, considerando uma regressão....
+
+
+
+Formalização do pedido precisa da faculdade informar que trata-se de uso para Trabalho de Conclusão de Curso.
+
+regressão antes e depois
+ ou séries temporais
+
+data de promulgação -> só os juízes CDF -> verificar período de exclusão.

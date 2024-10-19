@@ -1,0 +1,167 @@
+---
+title: 'Relatório 3'
+subtitle: 'RDD - TCC'
+author: "José Luiz Cavalcanti"
+date: "`r format(Sys.time(), '%d/%m/%Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_depth: '2'
+    df_print: paged
+  bookdown::pdf_document2:
+    latex_engine: pdflatex
+    toc: yes
+    toc_depth: 2
+    number_sections: yes
+    extra_dependencies:
+      fontenc: T1
+      inputenc: utf8
+      babel: english, latin, brazil
+      ulem: normalem
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+  word_document:
+    toc: yes
+    toc_depth: '2'
+papersize: a4
+fontsize: 12pt
+linestretch: 1.5
+geometry: left = 1.0in, right = 1.0in, top = 1.0in, bottom = 1.0in
+indent: yes
+documentclass: article
+header-includes:
+- /usepackage{float, hyperref, booktabs, longtable, array, multirow, wrapfig, subfig,
+  pdflscape, threeparttable, indentfirst}
+- /hypersetup{colorlinks = true, urlcolor = blue, linkcolor = blue, citecolor = blue,
+  filecolor = blue}
+---
+
+
+```{r, echo=TRUE, include= FALSE, message = FALSE}
+# options
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = TRUE, fig.pos = "H", out.extra = "")
+options(knitr.graphics.error = FALSE, knitr.kable.NA = '', dplyr.summarise.inform = FALSE)
+
+#É recomendável que o usuário "limpe" sua plataforma R antes de realizar qualquer exercício.
+# cleaning workspace
+rm(list = ls())
+gc()
+
+
+```
+
+
+# Introdução
+
+Vamos puxar a base tratado para a nossa plataforma do r e vamos ler pacotes essenciais para realizar o exercício.
+
+```{r, echo=TRUE, include= TRUE, message = FALSE, warning=FALSE}
+
+library(dplyr)
+library(rdrobust)
+library(ggplot2)
+library(readxl)
+library(readr)
+library(stringr)
+BaseTJSP <- read_xlsx("C:/Users/José Luiz/Documents/BMAC/TCC/Base de dados decisão TJSP.xlsx")
+
+```
+
+Criando um dataframe pequeno para começar a trabalhar:
+
+```{r, echo=TRUE, include= TRUE, message = FALSE, warning=FALSE}
+novo_df <- BaseTJSP %>%
+  filter(`Situação do Provimento` %in% c('Provimento', 'Não-Provimento', 
+                                         'Provimento em Parte'))
+
+
+novo_df <- novo_df %>%
+  mutate(`Principal Parte Ativa` = case_when(
+    str_detect(`Principal Parte Ativa`, "Ministério") ~ "Ente 1",
+    str_detect(`Principal Parte Ativa`, "Prefeitura") | str_detect(`Principal Parte Ativa`, "Município") | str_detect(`Principal Parte Ativa`, "Estado") ~ "Ente 2",
+    TRUE ~ "Particular"
+  ))
+
+
+novo_df <- novo_df %>%
+  mutate(`Principal Parte Passiva` = case_when(
+    str_detect(`Principal Parte Passiva`, "Ministério") ~ "Ente 1",
+    str_detect(`Principal Parte Passiva`, "Prefeitura") | str_detect(`Principal Parte Passiva`, "Município") | str_detect(`Principal Parte Passiva`, "Estado") ~ "Ente 2",
+    TRUE ~ "Particular"
+  ))
+
+
+novo_df <- novo_df %>%
+  filter(`Assunto Principal` %in% c('10011-Improbidade Administrativa'))
+
+library(lubridate)
+novo_df$`Data da Movimentação` <- as.Date(novo_df$`Data da Movimentação`)
+novo_df$`Data da Movimentação` <- floor_date(novo_df$`Data da Movimentação`, "day")
+
+
+
+```
+
+Feito uma filtragem inicial agora é montar a parte de covariadas
+
+
+```{r, echo=TRUE, include= TRUE, message = FALSE, warning=FALSE}
+
+covariates <- cbind(
+  # Controles dos candidatos
+  org_julgador = novo_df$`Órgão Julgador Segunda Instancia`, # órgão julgador
+  parte_ativa = novo_df$`Principal Parte Ativa`, # parte ativa
+  parte_passiva = novo_df$`Principal Parte Passiva` # parte ativa
+) %>% 
+  as.data.frame()
+
+```
+
+```{r, echo=TRUE, include= TRUE, message = FALSE, warning=FALSE}
+library(rdrobust)
+library(ggplot2)
+
+# Suponha que seus dados estejam em um dataframe chamado df
+# e as colunas sejam 'decisao', 'data_decisao', 'data_lei', 'parte'
+
+# Crie uma variável de tempo em relação à data da lei
+novo_df$`Data da Movimentação` <- as.Date(novo_df$`Data da Movimentação`)
+novo_df$`Data da Movimentação` <- floor_date(novo_df$`Data da Movimentação`, "day")
+data_corte <- as.Date("2021-10-14")
+novo_df$tempo <- as.numeric(novo_df$`Data da Movimentação` - data_corte)
+
+# Crie uma variável indicadora para o período pós-lei
+novo_df$pos_lei <- ifelse(novo_df$tempo > 0, 1, 0)
+
+for (situacao in c("Provimento", "Provimento em Parte", "Não-Provimento")) {
+  for (parte in c("Ente 1", "Ente 2", "Particular")) {
+    df_sub <- subset(novo_df, novo_df$`Situação do Provimento` == situacao & novo_df$`Principal Parte Ativa` == parte)
+    if (nrow(df_sub) >= 10) {
+      # Crie um gráfico para cada parte e decisão
+      resultado <- rdrobust(y = df_sub$pos_lei, x = df_sub$tempo, h)
+      print(paste("Situação:", situacao, "Parte:", parte))
+      print(summary(resultado))
+      
+      ggplot(df_sub, aes(x=tempo, y=pos_lei)) +
+        geom_point() +
+        geom_smooth(method="lm") +
+        facet_wrap(~Situação) +
+        labs(title=paste("Gráfico de Regressão Descontínua para Parte", parte),
+             x="Tempo em relação à data da lei",
+             y="Situação") +
+        theme_minimal()
+    } else {
+      print(paste("Não há dados suficientes para a Situação", situacao, "e a Parte", parte))
+    }
+  }
+}
+```
+
+
+
+
+
+
+
+```

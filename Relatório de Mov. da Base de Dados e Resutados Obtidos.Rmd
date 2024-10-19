@@ -1,0 +1,416 @@
+---
+title: 'Relatório'
+subtitle: 'Trabalhos iniciais com a Base de Dados TJSP'
+author: "José Luiz Cavalcanti"
+date: "`r format(Sys.time(), '%d/%m/%Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_depth: '2'
+    df_print: paged
+  bookdown::pdf_document2:
+    latex_engine: pdflatex
+    toc: yes
+    toc_depth: 2
+    number_sections: yes
+    extra_dependencies:
+      fontenc: T1
+      inputenc: utf8
+      babel: english, latin, brazil
+      ulem: normalem
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+  word_document:
+    toc: yes
+    toc_depth: '2'
+papersize: a4
+fontsize: 12pt
+linestretch: 1.5
+geometry: left = 1.0in, right = 1.0in, top = 1.0in, bottom = 1.0in
+indent: yes
+documentclass: article
+header-includes:
+- /usepackage{float, hyperref, booktabs, longtable, array, multirow, wrapfig, subfig,
+  pdflscape, threeparttable, indentfirst}
+- /hypersetup{colorlinks = true, urlcolor = blue, linkcolor = blue, citecolor = blue,
+  filecolor = blue}
+---
+
+
+```{r, echo=TRUE, include= FALSE, message = FALSE}
+# options
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = TRUE, fig.pos = "H", out.extra = "")
+options(knitr.graphics.error = FALSE, knitr.kable.NA = '', dplyr.summarise.inform = FALSE)
+
+#É recomendável que o usuário "limpe" sua plataforma R antes de realizar qualquer exercício.
+# cleaning workspace
+rm(list = ls())
+gc()
+
+```
+
+# Introdução
+
+Neste projeto inicial iremos verificar as bases de dados que temos para trabalhar para responder as seguintes perguntas do nosso TCC, com relação as alterações da lei de Improbidade
+Adiminstrativa:
+
+## Decisões em Segunda Instância momento de alteração:
+
+Inicialmente vamos buscar e baixar os pacotes que precisamos, bem como carregar nossa base de dados.
+
+```{r, echo=TRUE, include= TRUE, message = FALSE, warning=FALSE}
+
+library(dplyr)
+library(rdrobust)
+library(ggplot2)
+library(readxl)
+library(readr)
+library(stringr)
+library(rdd)
+library(rddtools)
+BaseTJSP <- read_xlsx("C:/Users/José Luiz/Documents/BMAC/TCC/Base de dados decisão TJSP.xlsx")
+BasePrimeira <- read_xlsx("C:/Users/José Luiz/Documents/BMAC/TCC/BaseDados 1ª Instância Bruta.xlsx")
+```
+
+Iremos agora trabalhar nessa base de dados restringindo a mesma para casos mais simples para verificar a viabilidade dessa hipótese, ou seja, casos com uma única parte recorrente e com um único recurso
+
+```{r, echo=TRUE, include= TRUE, message = FALSE, warning=FALSE}
+novo_df <- BaseTJSP %>%
+  filter(`Situação do Provimento` %in% c('Provimento', 'Não-Provimento', 
+                                         'Provimento em Parte'))
+
+novo_df <- novo_df %>%
+  mutate(`Situação do Provimento` = ifelse(`Situação do Provimento` == "Provimento em Parte", "Provimento", `Situação do Provimento`))
+
+novo_df <- novo_df %>%
+  mutate(`Principal Parte Ativa` = case_when(
+    str_detect(`Principal Parte Ativa`, "Ministério") ~ "Ente 1",
+    str_detect(`Principal Parte Ativa`, "Prefeitura") | str_detect(`Principal Parte Ativa`, "Município") | str_detect(`Principal Parte Ativa`, "Estado") ~ "Ente 2",
+    TRUE ~ "Particular"
+  ))
+novo_df <- novo_df %>%
+  mutate(`Principal Parte Passiva` = case_when(
+    str_detect(`Principal Parte Passiva`, "Ministério") ~ "Ente 1",
+    str_detect(`Principal Parte Passiva`, "Prefeitura") | str_detect(`Principal Parte Passiva`, "Município") | str_detect(`Principal Parte Passiva`, "Estado") ~ "Ente 2",
+    TRUE ~ "Particular"
+  ))
+
+novo_df <- novo_df %>%
+  filter(`Assunto Principal` %in% c('10011-Improbidade Administrativa'))
+  
+#novo_df <- novo_df %>%
+  #filter(novo_df$`Ação Classe do PG` %in% c('64 - Ação Civil de Improbidade Administrativa'))
+
+library(lubridate)
+novo_df$`Data da Movimentação` <- as.Date(novo_df$`Data da Movimentação`)
+
+novo_df <- novo_df %>%
+  filter(novo_df$`Data da Movimentação` >= '2016-01-01')
+
+novo_df$Ano <- format(novo_df$`Data da Movimentação`, "%Y")
+novo_df$Mes <- format(novo_df$`Data da Movimentação`, "%m")
+novo_df$Semestre <- as.numeric(cut(as.numeric(format(novo_df$`Data da Movimentação`, "%m")), breaks = c(0, 6, 12), labels = FALSE))
+novo_df$Bimestre <- as.numeric(cut(as.numeric(format(novo_df$`Data da Movimentação`, "%m")), breaks = c(0, 2, 4, 6, 8, 10, 12), labels = FALSE))
+```
+
+Inicialmente os tratamentos efetuados foram: Definir que qualquer tipo de provimento, quer seja parcial ou integral encontra-se com o status de Provimento, e a outra hipótese é de não provimento.
+
+Segundo, foram feitos ajustes nas designações das partes envolvidas para proteger as informações além de restringir em três tipos de envolvidos: Ente 1 - recursos do MP, Ente 2 - recursos de entes públicos (Prefeituras e Estado de São Paulo), 3 - Particulares.
+
+Terceiro, foram somente considerados os casos de improbidade adminsitrativa stricto sensu, ou seja uma das 3 hipóteses abarcadas pela lei de improbidade administrativa, referente ao art. 10 da Lei. (As condutas estão nos artigos 10, 11 e 12 da Lei 8429/92).
+
+Por fim filtramos a base de dados para os processos referentes a 2016 até meados de 2024, e fizemos a definição da coluna mês, ano, bimestre e semestre para utilizar em nossos agrupamentos iniciais. Depois foi verificada o percentual anual de acordo com o resultado dos recursos em Segunda Instância.
+
+- Total sem discriminação das partes
+
+```{r, echo=TRUE, include= TRUE, message = FALSE, warning=FALSE}
+
+dados_agrupados1 <- novo_df %>%
+  group_by(Ano, `Principal Parte Ativa`) %>%
+  summarise(Contagem = n())
+
+total_por_ano <- dados_agrupados1 %>%
+  group_by(Ano) %>%
+  summarise(Total = sum(Contagem))
+
+dados_agrupados1 <- merge(dados_agrupados1, total_por_ano, by = c("Ano"))
+
+dados_agrupados1$Percentual <- (dados_agrupados1$Contagem / dados_agrupados1$Total) * 100
+
+ggplot(dados_agrupados1, aes(x = interaction(Ano, sep = "-"), y = Contagem, color = `Principal Parte Ativa`)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Ano", y = "Quantidades") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+
+ggplot(dados_agrupados1, aes(x = interaction(Ano, sep = "-"), y = Percentual, color = `Principal Parte Ativa`)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Ano", y = "Percentual") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+
+
+
+```
+
+ - Neste segundo grupo analisamos os processos cujo recurso tenha sido do MP e seu comportamento ao longo do ano:
+ 
+```{r, echo=TRUE, include= TRUE, message = FALSE, warning=FALSE}
+dados_agrupados2 <- subset(novo_df, novo_df$`Principal Parte Ativa` == 'Ente 1') %>%
+  group_by(Ano, `Situação do Provimento`) %>%
+  summarise(Contagem = n())
+
+total_por_ano <- dados_agrupados2 %>%
+  group_by(Ano) %>%
+  summarise(Total = sum(Contagem))
+
+dados_agrupados2 <- merge(dados_agrupados2, total_por_ano, by = c("Ano"))
+
+dados_agrupados2$Percentual <- (dados_agrupados2$Contagem / dados_agrupados2$Total) * 100
+
+
+ggplot(dados_agrupados2, aes(x = interaction(Ano, sep = "-"), y = Percentual, color = `Situação do Provimento`)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Ano", y = "Percentual") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+ - Agora considerando os demais entes públicos que podem ser autores da ação, como recorrentes e no percentual dos resultados.
+ 
+```{r, echo=TRUE, include= TRUE, message = FALSE, warning=FALSE}
+dados_agrupados3 <- subset(novo_df, novo_df$`Principal Parte Ativa` == 'Ente 2') %>%
+  group_by(Ano, `Situação do Provimento`) %>%
+  summarise(Contagem = n())
+
+total_por_ano <- dados_agrupados3 %>%
+  group_by(Ano) %>%
+  summarise(Total = sum(Contagem))
+
+dados_agrupados3 <- merge(dados_agrupados3, total_por_ano, by = c("Ano"))
+
+dados_agrupados3$Percentual <- (dados_agrupados3$Contagem / dados_agrupados3$Total) * 100
+
+
+ggplot(dados_agrupados3, aes(x = interaction(Ano, sep = "-"), y = Percentual, color = `Situação do Provimento`)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Ano", y = "Percentual") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+- Por fim os casos em que os particulares, via de regra a parte passiva das ações de Improbidade Administrativa, quando os mesmos recorreram, e os percentuais de sucesso nos seus recursos:
+
+```{r, echo=TRUE, include= TRUE, message = FALSE, warning=FALSE}
+dados_agrupados4 <- subset(novo_df, novo_df$`Principal Parte Ativa` == 'Particular') %>%
+  group_by(Ano, `Situação do Provimento`) %>%
+  summarise(Contagem = n())
+
+total_por_ano <- dados_agrupados4 %>%
+  group_by(Ano) %>%
+  summarise(Total = sum(Contagem))
+
+dados_agrupados4 <- merge(dados_agrupados4, total_por_ano, by = c("Ano"))
+
+dados_agrupados4$Percentual <- (dados_agrupados4$Contagem / dados_agrupados4$Total) * 100
+
+
+ggplot(dados_agrupados4, aes(x = interaction(Ano, sep = "-"), y = Percentual, color = `Situação do Provimento`)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Ano", y = "Percentual") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+Dentre esses gráficos o que mais trouxe uma percepção de efeito causal a ser explorado foi o dos particulares, já que a entrada em vigor da Lei 14.230/21 ocorreu em outubro de 2022, e houve sensível aumento percentual entre os anos de 2021 e 2022 no sucesso dos recursos dos particulares.
+
+No que tange ao MP, foi observado, por conseguinte, um aumento nos seus não provimentos que poderá ser explorado também via RDD. E também compreender o que houve para não ter havido esse aumento no mesmo patamar que o sucesso dos particulares.
+
+
+Segue agora mais dois agrupamentos, por bimestre e por semestre:
+- Bimestre para MP
+
+```{r, echo=TRUE, include= TRUE, message = FALSE, warning=FALSE}
+#MP por Bimestre
+dados_agrupados21 <- subset(novo_df, novo_df$`Principal Parte Ativa` == 'Ente 1') %>%
+  group_by(Ano, Bimestre, `Situação do Provimento`) %>%
+  summarise(Contagem = n())
+
+total_por_bimestre <- dados_agrupados21 %>%
+  group_by(Ano, Bimestre) %>%
+  summarise(Total = sum(Contagem))
+
+dados_agrupados21 <- merge(dados_agrupados21, total_por_bimestre, by = c("Ano", "Bimestre"))
+
+dados_agrupados21$Percentual <- (dados_agrupados21$Contagem / dados_agrupados21$Total) * 100
+
+
+ggplot(dados_agrupados21, aes(x = interaction(Bimestre, Ano, sep = "-"), y = Percentual, color = `Situação do Provimento`)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Bimestre", y = "Quantidade") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+- Bimestre para Particular
+```{r, echo=TRUE, include= TRUE, message = FALSE, warning=FALSE}
+#Bimestre Particular
+dados_agrupados41 <- subset(novo_df, novo_df$`Principal Parte Ativa` == 'Particular') %>%
+  group_by(Ano, Bimestre, `Situação do Provimento`) %>%
+  summarise(Contagem = n())
+
+total_por_bimestre <- dados_agrupados41 %>%
+  group_by(Ano, Bimestre) %>%
+  summarise(Total = sum(Contagem))
+
+dados_agrupados41 <- merge(dados_agrupados41, total_por_bimestre, by = c("Ano", "Bimestre"))
+
+dados_agrupados41$Percentual <- (dados_agrupados41$Contagem / dados_agrupados41$Total) * 100
+
+
+ggplot(dados_agrupados41, aes(x = interaction(Bimestre, Ano, sep = "-"), y = Percentual, color = `Situação do Provimento`)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Bimestre", y = "Quantidade") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+Agora para semestral:
+
+```{r, echo=TRUE, include= TRUE, message = FALSE, warning=FALSE}
+#MP por semestre
+dados_agrupados22 <- subset(novo_df, novo_df$`Principal Parte Ativa` == 'Ente 1') %>%
+  group_by(Ano, Semestre, `Situação do Provimento`) %>%
+  summarise(Contagem = n())
+
+total_por_semestre <- dados_agrupados22 %>%
+  group_by(Ano, Semestre) %>%
+  summarise(Total = sum(Contagem))
+
+dados_agrupados22 <- merge(dados_agrupados22, total_por_semestre, by = c("Ano", "Semestre"))
+
+dados_agrupados22$Percentual <- (dados_agrupados22$Contagem / dados_agrupados22$Total) * 100
+
+
+ggplot(dados_agrupados22, aes(x = interaction(Semestre, Ano, sep = "-"), y = Percentual, color = `Situação do Provimento`)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Semestre", y = "Quantidade") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+
+```{r, echo=TRUE, include= TRUE, message = FALSE, warning=FALSE}
+#Particular por semestre
+dados_agrupados42 <- subset(novo_df, novo_df$`Principal Parte Ativa` == 'Particular') %>%
+  group_by(Ano, Semestre, `Situação do Provimento`) %>%
+  summarise(Contagem = n())
+
+total_por_semestre <- dados_agrupados42 %>%
+  group_by(Ano, Semestre) %>%
+  summarise(Total = sum(Contagem))
+
+dados_agrupados42 <- merge(dados_agrupados42, total_por_semestre, by = c("Ano", "Semestre"))
+
+dados_agrupados42$Percentual <- (dados_agrupados42$Contagem / dados_agrupados42$Total) * 100
+
+
+ggplot(dados_agrupados42, aes(x = interaction(Semestre, Ano, sep = "-"), y = Percentual, color = `Situação do Provimento`)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Semestre", y = "Quantidade") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+
+
+
+
+## Novas ações distribuídas:
+
+#Agora iniciaremos analisando a segunda base de dados na qual temos os processos
+#em primeira instância e iremos verificar quantas novas ações foram propostas após a 
+#alteração na LIA'''
+
+
+```{r, echo=TRUE, include= TRUE, message = FALSE, warning=FALSE}
+primeira_df <- BasePrimeira %>%
+  mutate(`Principal Parte Ativa` = case_when(
+    str_detect(`Principal Parte Ativa`, "Ministério") ~ "Ente 1",
+    str_detect(`Principal Parte Ativa`, "Prefeitura") | 
+      str_detect(`Principal Parte Ativa`, "Município") | 
+      str_detect(`Principal Parte Ativa`, "Estado") | 
+      str_detect(`Principal Parte Ativa`, "MUNICÍPIO") |
+      str_detect(`Principal Parte Ativa`, "PREFEITURA") ~ "Ente 2",
+    TRUE ~ "Ente 2"
+  ))
+
+
+primeira_df <- primeira_df %>%
+  filter(`Assunto` %in% c('Improbidade Administrativa'))
+
+primeira_df$Entrada <- dmy(primeira_df$Entrada)
+primeira_df <- primeira_df %>%
+  filter(primeira_df$Entrada >= '2017-01-01')
+
+
+primeira_df$Ano <- format(primeira_df$Entrada, "%Y")
+primeira_df$Mes <- format(primeira_df$Entrada, "%m")
+```
+
+
+#Total por ano, parte indiscriminada - Percentual aparentemente mostra que o MP avocou as
+#ações para sua competência, dada a mudança de quem poderá entrar com ações agora.
+
+```{r, echo=TRUE, include= TRUE, message = FALSE, warning=FALSE}
+dados_primeira1 <- primeira_df %>%
+  group_by(Ano, `Principal Parte Ativa`) %>%
+  summarise(Contagem = n())
+
+total_por_ano <- dados_primeira1 %>%
+  group_by(Ano) %>%
+  summarise(Total = sum(Contagem))
+
+dados_primeira1 <- merge(dados_primeira1, total_por_ano, by = c("Ano"))
+
+dados_primeira1$Percentual <- (dados_primeira1$Contagem / dados_primeira1$Total) * 100
+
+
+ggplot(dados_primeira1, aes(x = interaction(Ano, sep = "-"), y = Percentual, color = `Principal Parte Ativa`)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Mês-Ano", y = "Percentual") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{r, echo=TRUE, include= TRUE, message = FALSE, warning=FALSE}
+dados_primeira2 <- primeira_df %>%
+  group_by(Ano, `Principal Parte Ativa`) %>%
+  summarise(Contagem = n())
+
+total_por_ano <- dados_primeira2 %>%
+  group_by(Ano) %>%
+  summarise(Total = sum(Contagem))
+
+dados_primeira2 <- subset(dados_primeira2, dados_primeira2$Ano >2016)
+
+ggplot(dados_primeira2, aes(x = interaction(Ano, sep = "-"), y = Contagem, color = `Principal Parte Ativa`)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Mês-Ano", y = "Quantidade") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+
+
+
